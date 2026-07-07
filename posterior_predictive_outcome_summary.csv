@@ -1,0 +1,7 @@
+label,regimen,scenario,n_sims,response_day,p_response_day,p_operational_clearance_by_response_day,p_rebound_by_response_day,p_durable_by_response_day,final_day,p_operational_clearance_by_final,p_rebound_by_final,p_durable_by_final,median_clearance_day,median_rebound_day
+"QNC7D, residual persistence",QNC7D,refractory,800,30,0.94125,1,0.05875,0.94125,180,1,0.84,0.16,1.33333333333333,60.9010416666667
+"QNC7D, AE, T_{ext}=10^{-9}",QNC7D,refractory,800,30,0.95,1,0.05,0.95,180,1,0.83,0.17,1.3125,62.6041666666667
+"QNC7D, AE, T_{ext}=10^{-12}",QNC7D,refractory,800,30,0.95125,1,0.04875,0.95125,180,1,0.8475,0.1525,1.33333333333333,59.9427083333333
+"MTZ14D+ABZ7D, residual persistence",MTZ14D_ABZ7D,refractory,800,30,0.7775,0.98875,0.21125,0.7775,180,0.98875,0.8625,0.12625,2.92708333333333,41.6354166666667
+"MTZ14D+ABZ7D, AE, T_{ext}=10^{-9}",MTZ14D_ABZ7D,refractory,800,30,0.78625,0.98125,0.195,0.78625,180,0.98125,0.8525,0.12875,2.86458333333333,44.7395833333333
+"MTZ14D+ABZ7D, AE, T_{ext}=10^{-12}",MTZ14D_ABZ7D,refractory,800,30,0.775,0.97625,0.20125,0.775,180,0.97625,0.845,0.13125,2.875,42.03125

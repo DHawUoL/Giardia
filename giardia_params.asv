@@ -1,0 +1,122 @@
+function p = giardia_params()
+% GIARDIA_PARAMS  Default parameter priors / point estimates for the within-host model.
+% All units are in hours and 1e9 cells unless stated otherwise.
+% You should refine these from literature or your own estimates.
+%
+% State variables (see giardia_simulate.m):
+%   T = trophozoites (billions) in upper small intestine
+%   C = cysts (billions) forming in lumen
+%   M = protective microbiome proxy (arbitrary units, scaled 0-1)
+%
+% Core dynamics (logistic / LV competition):
+%   dT/dt = rT*T*(1 - T/K) - k_encyst*T - k_I*T - k_micro*M*T - k_drug(T)*T
+%   dC/dt = k_encyst*T - k_c_decay*C
+%   dM/dt = rM*M*(1 - M) - dys*M   (simple recovery from dysbiosis)
+%
+% Drug kill term:
+%   k_drug(T) = sum_d  Emax_d * (Ceff_d^h_d) / (MIC_d^h_d + Ceff_d^h_d)
+%
+% Pharmacokinetics (giardia_pk.m): one-compartment, first-order elimination
+%   C_plasma_d(t) = sum_i (Dose_i / Vd_d) * exp(-kel_d*(t - t_i))
+%   C_eff_d(t) = f_lumen_d * C_plasma_d(t)
+%
+% All parameters are organized in struct p; priors given as [min, mode, max] for
+% triangular sampling unless fixed.
+%
+% NOTE: Units are approximate placeholders; replace with literature-calibrated values.
+% References to populate (example):
+%   CDC 2024; Lalle & Hanevik 2018; Karabay 2004; StatPearls 2024; FDA labels.
+
+% --- Growth / interaction parameters ---
+p.rT      = 0.04;     % trophozoite hourly growth (per h) ~ log2/day ~ 0.03-0.06
+p.K       = 20;       % carrying capacity (billions)
+p.k_encyst= 0.002;    % encystation rate (per h)
+p.k_I     = 0.001;    % immune/clearance baseline (per h) (can be ramped)
+p.k_micro = 0.02;     % microbiome competition coefficient
+p.k_c_decay = 0.02;   % cyst loss/decay (per h)
+p.dys     = 0.005;    % dysbiosis dampening of M (per h)
+p.rM      = 0.02;     % microbiome recovery rate (per h)
+
+% Initial conditions
+p.T0      = 0.5;      % initial trophozoites (billions)
+p.C0      = 0.1;      % initial cysts (billions)
+p.M0      = 0.3;      % initial microbiome level (0-1)
+
+% Clearance definition
+p.clearance_threshold = 1e-3;  % billions (~1e6 trophozoites)
+p.clearance_hold_h    = 72;    % require below threshold for 72h
+
+% --- Drug PK parameters (approximate; refine from labels/lit) ---
+% Metronidazole (MTZ)
+p.MTZ.halflife_h = 8.0;
+p.MTZ.kel        = log(2)/p.MTZ.halflife_h;
+p.MTZ.Vd_L       = 50;     % effective Vd (adult), coarse
+p.MTZ.f_lumen    = 0.1;    % lumen penetration factor (proxy)
+
+% Tinidazole (TDZ)
+p.TDZ.halflife_h = 13.0;
+p.TDZ.kel        = log(2)/p.TDZ.halflife_h;
+p.TDZ.Vd_L       = 50;
+p.TDZ.f_lumen    = 0.1;
+
+% Albendazole (ABZ) -> active metabolite sulfoxide
+p.ABZ.halflife_h = 10.0;
+p.ABZ.kel        = log(2)/p.ABZ.halflife_h;
+p.ABZ.Vd_L       = 20;
+p.ABZ.f_lumen    = 0.05;
+
+% Quinacrine (QNC) (legacy / refractory)
+p.QNC.halflife_h = 24.0; % placeholder, refine
+p.QNC.kel        = log(2)/p.QNC.halflife_h;
+p.QNC.Vd_L       = 150;  % highly distributed; placeholder
+p.QNC.f_lumen    = 0.05;
+
+% --- PD (kill) parameters (Emax/MIC/Hill); drug-specific ---
+% Values are placeholders; replace with in vitro susceptibility data if available
+p.MTZ.Emax = 0.3; p.MTZ.MIC = 5;  p.MTZ.h = 1.2; % per h, ug/L
+p.TDZ.Emax = 0.35; p.TDZ.MIC = 4; p.TDZ.h = 1.2;
+p.ABZ.Emax = 0.15; p.ABZ.MIC = 1; p.ABZ.h = 1.5;
+p.QNC.Emax = 0.25; p.QNC.MIC = 3; p.QNC.h = 1.2;
+
+% Adherence (dose-missing probability per scheduled dose)
+p.adherence.p_miss = 0.05;
+
+% Resistance scaling (reduce Emax for a fraction of patients)
+p.resistance.frac   = 0.15;
+p.resistance.scale  = 0.3;   % Emax -> scale*Emax
+
+% --- Minimal stomach -> duodenum PK parameters ---
+% Units:
+% k_GE, k_abs_duod, k_tr_duod are per hour
+% V_duod_L is litres
+% F_duod is fraction of dose effectively available to the modelled lumen pathway
+
+% Metronidazole
+p.MTZ.k_GE       = 1.2;    % fairly quick gastric emptying into duodenum
+p.MTZ.k_abs_duod = 1.5;    % rapid absorption
+p.MTZ.k_tr_duod  = 0.8;    % onward transit
+p.MTZ.V_duod_L   = 0.05;   % 50 mL effective duodenal volume
+p.MTZ.F_duod     = 0.1;    % full oral dose enters lumen pathway
+
+% Tinidazole
+p.TDZ.k_GE       = 1.0;
+p.TDZ.k_abs_duod = 1.2;
+p.TDZ.k_tr_duod  = 0.8;
+p.TDZ.V_duod_L   = 0.05;
+p.TDZ.F_duod     = 0.1;
+
+% Albendazole
+p.ABZ.k_GE       = 1.0;
+p.ABZ.k_abs_duod = 0.3;    % slower effective absorption
+p.ABZ.k_tr_duod  = 0.8;
+p.ABZ.V_duod_L   = 0.05;
+p.ABZ.F_duod     = 0.3;    % crude way to reflect poorer effective local availability
+
+% Quinacrine
+p.QNC.k_GE       = 1.0;
+p.QNC.k_abs_duod = 0.6;
+p.QNC.k_tr_duod  = 0.8;
+p.QNC.V_duod_L   = 0.05;
+p.QNC.F_duod     = 1.0;
+
+end

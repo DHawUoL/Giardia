@@ -1,140 +1,256 @@
-function summary = plot_outcome_probability_curves(cases, t_end_days, n_sims, seed, response_day, absorbExtinction, extinction_threshold)
-% PLOT_OUTCOME_PROBABILITY_CURVES
-% Posterior predictive outcome probabilities over time for one or more regimens.
+function summary = plot_outcome_probability_curves_cases(cases)
+%PLOT_OUTCOME_PROBABILITY_CURVES_CASES
+% Posterior predictive outcome probabilities for multiple projection cases.
 %
-% Required input:
-%   cases(k).chain_file
-%   cases(k).regimen
-%   cases(k).scenario
-%   cases(k).label
+% Each cases(k) needs:
+%   .chain_file
+%   .regimen
+%   .scenario
+%   .label
 %
-% Example:
-%   cases(1).chain_file = 'mcmc_sensitivity_outputs/pooled_alb_nitro_mtz14_abz7_chain.mat';
-%   cases(1).regimen    = 'MTZ14D_ABZ7D';
-%   cases(1).scenario   = 'refractory';
-%   cases(1).label      = 'MTZ14D + ABZ7D';
+% Optional per case:
+%   .absorbExtinction
+%   .extinction_threshold
+%   .extinction_hold_h
+%   .color
+%   .line_style
 %
-%   cases(2).chain_file = 'mcmc_sensitivity_outputs/qnc_refractory_50_54_chain.mat';
-%   cases(2).regimen    = 'QNC7D';
-%   cases(2).scenario   = 'refractory';
-%   cases(2).label      = 'QNC7D';
-%
-%   summary = plot_outcome_probability_curves(cases, 180, 800, 123, 30);
+% This is intended for comparing:
+%   - QNC7D vs MTZ14D_ABZ7D
+%   - residual persistence vs absorbing extinction
+%   - extinction thresholds such as 1e-9 and 1e-12
 
-if nargin < 2 || isempty(t_end_days), t_end_days = 180; end
-if nargin < 3 || isempty(n_sims),     n_sims = 800; end
-if nargin < 4 || isempty(seed),       seed = 123; end
-if nargin < 5 || isempty(response_day), response_day = 30; end
-if nargin < 6 || isempty(absorbExtinction), absorbExtinction = false; end
-if nargin < 7 || isempty(extinction_threshold), extinction_threshold = 1e-6; end
+%% ========================================================================
+%  USER TOGGLES
+%  ========================================================================
+
+cfg = struct();
+
+% Simulation
+cfg.t_end_days   = 180;
+cfg.n_sims       = 800;
+cfg.seed         = 123;
+cfg.response_day = 30;
+
+% Default extinction rule if not specified in cases(k)
+cfg.default_absorbExtinction = false;
+cfg.default_extinction_threshold = NaN;
+cfg.default_extinction_hold_h = 72;
+
+% Display
+cfg.figure_position = [100 100 1350 850];
+cfg.line_width = 4;%2.4;
+cfg.font_size = 16;
+cfg.show_legend = true;
+cfg.legend_num_columns = 1;
+
+% -------------------------------------------------------------------------
+% COLOURS: change these here
+% -------------------------------------------------------------------------
+C = lines(7);
+
+col = struct();
+col.QNC       = C(1,:);          % blue
+col.MTZABZ    = C(7,:);          % dark red / brown
+col.grey      = [0.45 0.45 0.45];
+col.black     = [0 0 0];
+
+% Optional threshold-specific variants if desired
+col.QNC_resid    = col.QNC;
+col.QNC_ext9     = col.QNC;
+col.QNC_ext12    = col.QNC;
+
+col.MTZABZ_resid = col.MTZABZ;
+col.MTZABZ_ext9  = col.MTZABZ;
+col.MTZABZ_ext12 = col.MTZABZ;
+
+% Line styles: change here
+ls = struct();
+ls.residual = '-';
+ls.ext9     = '--';
+ls.ext12    = ':';
+
+% Reference lines
+cfg.show_response_day = true;
+cfg.response_day_color = [0.45 0.45 0.45];
+
+%% ========================================================================
+%  Fill missing case fields
+%  ========================================================================
+
+for k = 1:numel(cases)
+
+    if ~isfield(cases(k), 'absorbExtinction') || isempty(cases(k).absorbExtinction)
+        cases(k).absorbExtinction = cfg.default_absorbExtinction;
+    end
+
+    if ~isfield(cases(k), 'extinction_threshold') || isempty(cases(k).extinction_threshold)
+        cases(k).extinction_threshold = cfg.default_extinction_threshold;
+    end
+
+    if ~isfield(cases(k), 'extinction_hold_h') || isempty(cases(k).extinction_hold_h)
+        cases(k).extinction_hold_h = cfg.default_extinction_hold_h;
+    end
+
+    if ~isfield(cases(k), 'line_style') || isempty(cases(k).line_style)
+        cases(k).line_style = '-';
+    end
+
+    if ~isfield(cases(k), 'color') || isempty(cases(k).color)
+        cases(k).color = C(mod(k-1, size(C,1)) + 1, :);
+    end
+end
+
+%% ========================================================================
+%  Project each case
+%  ========================================================================
 
 n_cases = numel(cases);
-
 all_curves = cell(n_cases,1);
 summary = table();
 
 for k = 1:n_cases
+
     S = load(cases(k).chain_file, 'chain');
     chain = S.chain;
 
     [curves, row] = local_project_one_chain( ...
-    chain, ...
-    cases(k).regimen, ...
-    cases(k).scenario, ...
-    cases(k).label, ...
-    t_end_days, ...
-    n_sims, ...
-    seed + 100*k, ...
-    response_day, ...
-    absorbExtinction, ...
-    extinction_threshold);
+        chain, ...
+        cases(k).regimen, ...
+        cases(k).scenario, ...
+        cases(k).label, ...
+        cfg.t_end_days, ...
+        cfg.n_sims, ...
+        cfg.seed + 100*k, ...
+        cfg.response_day, ...
+        cases(k).absorbExtinction, ...
+        cases(k).extinction_threshold, ...
+        cases(k).extinction_hold_h);
 
     all_curves{k} = curves;
     summary = [summary; row]; %#ok<AGROW>
 end
 
 disp(summary)
-writetable(summary, 'posterior_predictive_outcome_summary.csv');
+writetable(summary, 'posterior_predictive_outcome_summary_cases.csv');
 
-% -------------------------------------------------------------------------
-% Plot
-% -------------------------------------------------------------------------
-cols = lines(n_cases);
+%% ========================================================================
+%  Plot four outcome curves
+%  ========================================================================
+
 time_days = all_curves{1}.time_days;
 
-figure('Color','w','Position',[100 100 1200 820]);
-tiledlayout(2,2,'TileSpacing','compact','Padding','compact');
+fig = figure('Color','w','Position',cfg.figure_position);
+tl = tiledlayout(2,2,'TileSpacing','compact','Padding','compact');
 
+% -------------------------------------------------------------------------
 % 1. Below threshold at time t
+% -------------------------------------------------------------------------
 nexttile; hold on
 for k = 1:n_cases
     plot(time_days, all_curves{k}.p_below_now, ...
-        'LineWidth', 2.2, 'Color', cols(k,:), ...
+        'LineWidth', cfg.line_width, ...
+        'Color', cases(k).color, ...
+        'LineStyle', cases(k).line_style, ...
         'DisplayName', cases(k).label);
 end
-xline(response_day, '--', 'Observation day', ...
-    'Color',[0.45 0.45 0.45], 'HandleVisibility','off');
+local_obs_line(cfg)
+xlim([0,time_days(end)])
 ylim([0 1])
 xlabel('Time since treatment start (days)')
 ylabel('Probability')
-title('Below clearance threshold at time t')
+title('Below operational clearance threshold at time t')
 grid on; box on
 
+% -------------------------------------------------------------------------
 % 2. Operational clearance by time t
+% -------------------------------------------------------------------------
 nexttile; hold on
 for k = 1:n_cases
     plot(time_days, all_curves{k}.p_operational_clearance_by, ...
-        'LineWidth', 2.2, 'Color', cols(k,:), ...
+        'LineWidth', cfg.line_width, ...
+        'Color', cases(k).color, ...
+        'LineStyle', cases(k).line_style, ...
         'DisplayName', cases(k).label);
 end
-xline(response_day, '--', 'Observation day', ...
-    'Color',[0.45 0.45 0.45], 'HandleVisibility','off');
+local_obs_line(cfg)
+xlim([0,time_days(end)])
 ylim([0 1])
 xlabel('Time since treatment start (days)')
 ylabel('Probability')
 title('Operational clearance by time t')
 grid on; box on
 
+% -------------------------------------------------------------------------
 % 3. Rebound by time t
+% -------------------------------------------------------------------------
 nexttile; hold on
 for k = 1:n_cases
     plot(time_days, all_curves{k}.p_rebound_by, ...
-        'LineWidth', 2.2, 'Color', cols(k,:), ...
+        'LineWidth', cfg.line_width, ...
+        'Color', cases(k).color, ...
+        'LineStyle', cases(k).line_style, ...
         'DisplayName', cases(k).label);
 end
-xline(response_day, '--', 'Observation day', ...
-    'Color',[0.45 0.45 0.45], 'HandleVisibility','off');
+local_obs_line(cfg)
+xlim([0,time_days(end)])
 ylim([0 1])
 xlabel('Time since treatment start (days)')
 ylabel('Probability')
 title('Rebound after operational clearance by time t')
 grid on; box on
 
+% -------------------------------------------------------------------------
 % 4. Durable clearance by time t
+% -------------------------------------------------------------------------
 nexttile; hold on
 for k = 1:n_cases
     plot(time_days, all_curves{k}.p_durable_by, ...
-        'LineWidth', 2.2, 'Color', cols(k,:), ...
+        'LineWidth', cfg.line_width, ...
+        'Color', cases(k).color, ...
+        'LineStyle', cases(k).line_style, ...
         'DisplayName', cases(k).label);
 end
-xline(response_day, '--', 'Observation day', ...
-    'Color',[0.45 0.45 0.45], 'HandleVisibility','off');
+local_obs_line(cfg)
+xlim([0,time_days(end)])
 ylim([0 1])
 xlabel('Time since treatment start (days)')
 ylabel('Probability')
 title('Durable clearance by time t')
 grid on; box on
 
-lgd = legend('Location','southoutside', 'NumColumns', min(3,n_cases));
-lgd.Layout.Tile = 'south';
+ax = findall(fig, 'Type', 'axes');
+set(ax, 'FontSize', cfg.font_size);
 
-sgtitle('Posterior predictive outcome probabilities', 'FontWeight','bold');
+if cfg.show_legend
+    lgd = legend('Location','eastoutside', ...
+        'NumColumns', cfg.legend_num_columns);
+    lgd.Layout.Tile = 'east';
+    lgd.FontSize = cfg.font_size;
+end
+
+%sgtitle(tl, 'Posterior predictive outcome probabilities', ...
+    %'FontWeight','bold', ...
+    %'FontSize', cfg.font_size + 2);
 
 end
 
-% =========================================================================
+%% =========================================================================
+function local_obs_line(cfg)
+
+if cfg.show_response_day
+    xline(cfg.response_day, '--', 'Observation day', ...
+    'Color', cfg.response_day_color, ...
+    'HandleVisibility','off', ...
+    'LabelVerticalAlignment','middle', ...
+    'LabelHorizontalAlignment','left');
+end
+
+end
+
+%% =========================================================================
 function [curves, summary_row] = local_project_one_chain(chain, regimen_name, scenario, label, ...
-    t_end_days, n_sims, seed, response_day, absorbExtinction, extinction_threshold)
+    t_end_days, n_sims, seed, response_day, absorbExtinction, extinction_threshold, extinction_hold_h)
 
 rng(seed);
 
@@ -170,6 +286,7 @@ Z = local_make_virtual_panel(n_sims, seed + 1000);
 below_now = false(n_sims, n_t);
 clearance_time_h = NaN(n_sims,1);
 rebound_time_h   = NaN(n_sims,1);
+extinction_time_h = NaN(n_sims,1);
 response_day_success = false(n_sims,1);
 
 for i = 1:n_sims
@@ -180,6 +297,7 @@ for i = 1:n_sims
     p = local_apply_pd_multipliers(p, theta, param_names);
 
     opts = struct('useMicrobiome', true, 'resistant', false);
+
     if strcmpi(scenario, 'refractory')
         opts.resistant = true;
     elseif strcmpi(scenario, 'baseline')
@@ -189,8 +307,11 @@ for i = 1:n_sims
     end
 
     opts.absorbExtinction = absorbExtinction;
-    opts.extinction_threshold = extinction_threshold;
-    opts.extinction_hold_h = 72;
+
+    if absorbExtinction
+        opts.extinction_threshold = extinction_threshold;
+        opts.extinction_hold_h = extinction_hold_h;
+    end
 
     reg = giardia_regimens(regimen_name, 0);
     out = giardia_simulate(tvec, reg, p, opts);
@@ -211,6 +332,10 @@ for i = 1:n_sims
         end
     end
 
+    if isfield(out, 'extinction_time_h') && ~isnan(out.extinction_time_h)
+        extinction_time_h(i) = out.extinction_time_h;
+    end
+
     Tday = interp1(time_days, T, response_day, 'linear', 'extrap');
     cleared_by_day = ~isnan(clearance_time_h(i)) && clearance_time_h(i) <= 24*response_day;
     response_day_success(i) = cleared_by_day && (Tday < thr);
@@ -224,6 +349,7 @@ p_rebound_by = NaN(1,n_t);
 p_durable_by = NaN(1,n_t);
 
 for tt = 1:n_t
+
     th = tvec(tt);
 
     cleared_by_t = ~isnan(clearance_time_h) & clearance_time_h <= th;
@@ -240,6 +366,9 @@ curves = struct();
 curves.label = label;
 curves.regimen = regimen_name;
 curves.scenario = scenario;
+curves.absorbExtinction = absorbExtinction;
+curves.extinction_threshold = extinction_threshold;
+curves.extinction_hold_h = extinction_hold_h;
 curves.time_days = time_days;
 curves.p_below_now = p_below_now;
 curves.p_operational_clearance_by = p_operational_clearance_by;
@@ -262,22 +391,30 @@ summary_row = table();
 summary_row.label = string(label);
 summary_row.regimen = string(regimen_name);
 summary_row.scenario = string(scenario);
+summary_row.absorbExtinction = absorbExtinction;
+summary_row.extinction_threshold = extinction_threshold;
+summary_row.extinction_hold_h = extinction_hold_h;
 summary_row.n_sims = n_sims;
 summary_row.response_day = response_day;
+
 summary_row.p_response_day = mean(response_day_success);
 summary_row.p_operational_clearance_by_response_day = mean(cleared_by_obs);
 summary_row.p_rebound_by_response_day = mean(rebound_by_obs);
 summary_row.p_durable_by_response_day = mean(durable_by_obs);
+
 summary_row.final_day = t_end_days;
 summary_row.p_operational_clearance_by_final = mean(cleared_by_final);
 summary_row.p_rebound_by_final = mean(rebound_by_final);
 summary_row.p_durable_by_final = mean(durable_by_final);
+summary_row.p_absorbed_extinct_by_final = mean(~isnan(extinction_time_h) & extinction_time_h <= final_h);
+
 summary_row.median_clearance_day = median(clearance_time_h(~isnan(clearance_time_h))/24, 'omitnan');
 summary_row.median_rebound_day = median(rebound_time_h(~isnan(rebound_time_h))/24, 'omitnan');
+summary_row.median_extinction_day = median(extinction_time_h(~isnan(extinction_time_h))/24, 'omitnan');
 
 end
 
-% =========================================================================
+%% =========================================================================
 function Z = local_make_virtual_panel(n_vp, seed)
 
 rng(seed);
@@ -301,7 +438,7 @@ Z.alpha    = randn(n_vp,1);
 
 end
 
-% =========================================================================
+% -------------------------------------------------------------------------
 function p = local_make_patient(p0, Z, i, SC)
 
 p = p0;
@@ -340,7 +477,7 @@ end
 
 end
 
-% =========================================================================
+% -------------------------------------------------------------------------
 function p = local_apply_pd_multipliers(p, theta, param_names)
 
 mult = struct();
@@ -383,16 +520,3 @@ if isfield(mult,'log_QNC_MIC')
 end
 
 end
-%{
-cases(1).chain_file = 'mcmc_sensitivity_outputs/pooled_alb_nitro_mtz14_abz7_chain.mat';
-cases(1).regimen    = 'MTZ14D_ABZ7D';
-cases(1).scenario   = 'refractory';
-cases(1).label      = 'MTZ14D + ABZ7D';
-
-cases(2).chain_file = 'mcmc_sensitivity_outputs/qnc_refractory_50_54_chain.mat';
-cases(2).regimen    = 'QNC7D';
-cases(2).scenario   = 'refractory';
-cases(2).label      = 'QNC7D';
-
-summary = plot_outcome_probability_curves(cases, 180, 800, 123, 30);
-%}

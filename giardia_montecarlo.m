@@ -1,4 +1,5 @@
-function chain = giardia_montecarlo(n_iter, n_vp, t_end_days, mcmc_seed, scenario_name, vp_seed, theta_init)% GIARDIA_MONTECARLO
+%function chain = giardia_montecarlo(n_iter, n_vp, t_end_days, mcmc_seed, scenario_name, vp_seed, theta_init)% GIARDIA_MONTECARLO
+function chain = giardia_montecarlo(n_iter, n_vp, t_end_days, mcmc_seed, scenario_name, vp_seed, theta_init, prior_sd_override)
 % Random-walk Metropolis calibration of Giardia pharmacodynamic parameters.
 %
 % Core idea:
@@ -30,6 +31,7 @@ if nargin < 4 || isempty(mcmc_seed),     mcmc_seed = 42; end
 if nargin < 5 || isempty(scenario_name), scenario_name = 'pooled_alb_nitro_mtz14_abz7'; end
 if nargin < 6 || isempty(vp_seed),       vp_seed = 1001; end
 if nargin < 7 || isempty(theta_init); theta_init = []; end
+if nargin < 8 || isempty(prior_sd_override); prior_sd_override = []; end
 
 %% ========================================================================
 %  SCENARIO / PARAMETER BLOCK
@@ -251,6 +253,16 @@ if ~exist(outdir, 'dir')
     mkdir(outdir);
 end
 
+% Optional prior-width override for sensitivity analyses.
+if ~isempty(prior_sd_override)
+    prior_sd_override = reshape(prior_sd_override, 1, []);
+    if numel(prior_sd_override) ~= numel(SC.param_names)
+        error('prior_sd_override must have length %d for scenario %s.', ...
+            numel(SC.param_names), scenario_name);
+    end
+    SC.prior_sd = prior_sd_override;
+end
+
 %% ========================================================================
 %  RUN MCMC
 %  ========================================================================
@@ -330,6 +342,7 @@ chain.t_end_days = t_end_days;
 chain.mcmc_seed = mcmc_seed;
 chain.vp_seed = vp_seed;
 chain.when = datestr(now);
+chain.prior_sd_override = prior_sd_override;
 
 % Convenience posterior summaries after 50% burn-in.
 burn = floor(n_iter/2) + 1;

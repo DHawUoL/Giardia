@@ -1,0 +1,171 @@
+function summary_table = modelCompare2(t_end_days, make_plots)
+% GIARDIA_STEPS45_SUMMARY
+% Deterministic protocol summary plus resistant/reduced-effect comparison.
+%
+% This implements the next two steps after updating the Monte Carlo code:
+%   Step 4: baseline deterministic table
+%   Step 5: resistant/reduced-effect deterministic table
+%
+% Outputs, for each protocol and scenario:
+%   - clearance time in days
+%   - minimum trophozoite burden
+%   - day-30 burden, if the simulation reaches day 30
+%   - final burden
+%   - first operational clearance flag
+%   - rebound flag
+%   - durable clearance flag
+%
+% Usage:
+%   summary_table = giardia_steps45_summary();
+%   summary_table = giardia_steps45_summary(30, true);
+%
+% Requirements:
+%   giardia_params.m
+%   giardia_regimens.m
+%   giardia_simulate.m
+%
+% Notes:
+%   - This uses the parameter values currently returned by giardia_params().
+%   - If you have frozen tuned values in giardia_params.m, those values are used here.
+%   - Resistance is implemented through opts.resistant=true, i.e. using the
+%     resistance scaling already inside giardia_simulate.m.
+
+if nargin < 1 || isempty(t_end_days)
+    t_end_days = 30;
+end
+if nargin < 2 || isempty(make_plots)
+    make_plots = true;
+end
+
+p = giardia_params();
+tvec = 0:0.1:(24*t_end_days);  % hours; 0.1 h gives smooth deterministic curves
+
+% Protocols for the focused comparison
+regimen_keys   = {'NONE', 'MTZ5D', 'TDZ2G_ONCE', 'MTZ14D_ABZ7D'};
+regimen_labels = {'Untreated', 'MTZ5D', 'TDZ2G', 'MTZ14D+ABZ7D'};
+
+scenario_labels = {'baseline', 'resistant'};
+scenario_resist = [false, true];
+
+n_rows = numel(regimen_keys) * numel(scenario_labels);
+
+Scenario = cell(n_rows,1);
+Protocol = cell(n_rows,1);
+Clearance_time_days = NaN(n_rows,1);
+Cleared = false(n_rows,1);
+Rebounded = false(n_rows,1);
+Durable_clearance = false(n_rows,1);
+Min_T = NaN(n_rows,1);
+Day30_T = NaN(n_rows,1);
+Final_T = NaN(n_rows,1);
+
+outs = cell(numel(scenario_labels), numel(regimen_keys));
+row = 0;
+
+for s = 1:numel(scenario_labels)
+    for r = 1:numel(regimen_keys)
+        row = row + 1;
+
+        reg = local_make_regimen(regimen_keys{r});
+        opts = struct('useMicrobiome', true, 'resistant', scenario_resist(s));
+        out = giardia_simulate(tvec, reg, p, opts);
+        outs{s,r} = out;
+
+        Scenario{row} = scenario_labels{s};
+        Protocol{row} = regimen_labels{r};
+
+        if ~isnan(out.clearance_time_h)
+            Clearance_time_days(row) = out.clearance_time_h / 24;
+            Cleared(row) = true;
+        end
+
+        Rebounded(row) = out.rebounded;
+        Durable_clearance(row) = Cleared(row) && ~Rebounded(row);
+        Min_T(row) = min(out.T);
+        Final_T(row) = out.T(end);
+
+        if t_end_days >= 30
+            Day30_T(row) = interp1(out.tvec(:)/24, out.T(:), 30, 'linear');
+        end
+    end
+end
+
+summary_table = table(Scenario, Protocol, Cleared, Clearance_time_days, ...
+    Rebounded, Durable_clearance, Min_T, Day30_T, Final_T);
+
+disp(' ')
+disp('=== Deterministic protocol summary: baseline and resistant scenarios ===')
+disp(summary_table)
+
+% Save machine-readable table for slides/paper summaries
+try
+    writetable(summary_table, 'giardia_steps45_summary.csv');
+    fprintf('\nSaved: giardia_steps45_summary.csv\n');
+catch ME
+    warning('Could not write CSV file: %s', ME.message);
+end
+
+if make_plots
+    local_plot_scenarios(outs, regimen_labels, scenario_labels, p, t_end_days);
+end
+
+end
+
+% -------------------------------------------------------------------------
+function reg = local_make_regimen(key)
+% Create regimen, including an empty no-treatment regimen.
+if strcmpi(key, 'NONE')
+    reg.name = 'NONE';
+    reg.doses = struct();
+else
+    reg = giardia_regimens(key, 0);
+end
+end
+
+% -------------------------------------------------------------------------
+function local_plot_scenarios(outs, regimen_labels, scenario_labels, p, t_end_days)
+% Plot baseline and resistant trajectories.
+
+figure;
+tiledlayout(1,2,'TileSpacing','compact');
+
+for s = 1:numel(scenario_labels)
+    nexttile;
+    hold on;
+    h = gobjects(numel(regimen_labels),1);
+
+    for r = 1:numel(regimen_labels)
+        out = outs{s,r};
+        h(r) = plot(out.tvec(:)/24, out.T(:), 'LineWidth', 2);
+    end
+
+    yline(p.clearance_threshold, 'k--', 'Clearance threshold');
+    xlabel('Time (days)');
+    ylabel('Trophozoites (billions)');
+    title(sprintf('%s scenario', scenario_labels{s}));
+    xlim([0 t_end_days]);
+    legend(h, regimen_labels, 'Location', 'northeastoutside');
+end
+
+figure;
+tiledlayout(1,2,'TileSpacing','compact');
+
+for s = 1:numel(scenario_labels)
+    nexttile;
+    hold on;
+    h = gobjects(numel(regimen_labels),1);
+
+    for r = 1:numel(regimen_labels)
+        out = outs{s,r};
+        h(r) = semilogy(out.tvec(:)/24, max(out.T(:), 1e-18), 'LineWidth', 2);
+    end
+
+    yline(p.clearance_threshold, 'k--', 'Clearance threshold');
+    xlabel('Time (days)');
+    ylabel('Trophozoites (billions, log scale)');
+    title(sprintf('%s scenario, log scale', scenario_labels{s}));
+    xlim([0 t_end_days]);
+    legend(h, regimen_labels, 'Location', 'northeastoutside');
+end
+
+end

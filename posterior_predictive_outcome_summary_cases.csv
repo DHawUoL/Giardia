@@ -1,0 +1,7 @@
+label,regimen,scenario,absorbExtinction,extinction_threshold,extinction_hold_h,n_sims,response_day,p_response_day,p_operational_clearance_by_response_day,p_rebound_by_response_day,p_durable_by_response_day,final_day,p_operational_clearance_by_final,p_rebound_by_final,p_durable_by_final,p_absorbed_extinct_by_final,median_clearance_day,median_rebound_day,median_extinction_day
+"QNC7D, residual persistence",QNC7D,refractory,0,NaN,72,800,30,0.94125,1,0.05875,0.94125,180,1,0.84,0.16,0,1.33333333333333,60.9010416666667,NaN
+"QNC7D, AE, T_{ext}=10^{-9}",QNC7D,refractory,1,1e-09,72,800,30,0.98875,1,0.01125,0.98875,180,1,0.01125,0.98875,0.98875,1.3125,20.3229166666667,4.13541666666667
+"QNC7D, AE, T_{ext}=10^{-12}",QNC7D,refractory,1,1e-12,72,800,30,0.96125,1,0.03875,0.96125,180,1,0.0925,0.9075,0.90625,1.33333333333333,31.3489583333333,5.40625
+"MTZ14D+ABZ7D, residual persistence",MTZ14D_ABZ7D,refractory,0,NaN,72,800,30,0.7775,0.98875,0.21125,0.7775,180,0.98875,0.8625,0.12625,0,2.92708333333333,41.6354166666667,NaN
+"MTZ14D+ABZ7D, AE, T_{ext}=10^{-9}",MTZ14D_ABZ7D,refractory,1,1e-09,72,800,30,0.79875,0.98125,0.1825,0.79875,180,0.98125,0.30125,0.68,0.67875,2.86458333333333,27.6875,8.69791666666667
+"MTZ14D+ABZ7D, AE, T_{ext}=10^{-12}",MTZ14D_ABZ7D,refractory,1,1e-12,72,800,30,0.775,0.97625,0.20125,0.775,180,0.97625,0.67375,0.3025,0.28625,2.875,37.5,10.6354166666667

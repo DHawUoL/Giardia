@@ -1,0 +1,409 @@
+function summary = plot_prior_posterior_cases(cases)
+% plot_prior_posterior_cases
+%
+% Plot prior vs posterior distributions for MCMC parameter chains.
+%
+% INPUT
+%   cases : struct array, with at least
+%       cases(i).chain_file
+%       cases(i).regimen
+%
+% Optional fields:
+%       cases(i).label
+%       cases(i).color
+%
+% Automatic layouts:
+%
+%   QNC chain, 2 parameters:
+%       1 x 2
+%       left  = QNC Emax
+%       right = QNC concentration scale
+%
+%   Alb + nitro chain, 4 parameters:
+%       2 x 2
+%       top-left      = nitroimidazole Emax
+%       top-right     = nitroimidazole concentration scale
+%       bottom-left   = albendazole Emax
+%       bottom-right  = albendazole concentration scale
+%
+% Multiple cases with the same parameter structure are overlaid
+% in each relevant panel.
+
+%% ========================================================================
+% TOGGLES
+% ========================================================================
+
+cmap = lines(7);
+
+burn_frac          = 0.5;
+font_size          = 14;
+prior_mu_default   = 0;
+fallback_prior_sd  = 0.75;
+
+use_case_color     = true;
+
+prior_color        = cmap(1,:);
+posterior_default  = cmap(7,:);
+
+prior_line_width   = 3.0;
+post_line_width    = 3.0;
+
+show_baseline      = true;
+show_legend        = true;
+legend_location    = 'best';
+
+panel_width_px     = 520;
+panel_height_px    = 330;
+figure_left_px     = 100;
+figure_bottom_px   = 100;
+
+%% ========================================================================
+% Basic checks
+% ========================================================================
+
+n_cases = numel(cases);
+if n_cases == 0
+    error('No cases supplied.');
+end
+
+%% ========================================================================
+% Load all chains first
+% ========================================================================
+
+chains = cell(n_cases,1);
+names_all = cell(n_cases,1);
+theta_post_all = cell(n_cases,1);
+
+for i = 1:n_cases
+
+    chains{i} = load_chain_struct(cases(i).chain_file);
+
+    if ~isfield(chains{i}, 'theta') || ~isfield(chains{i}, 'param_names')
+        error('Chain %d is missing theta and/or param_names.', i);
+    end
+
+    theta = chains{i}.theta;
+
+    names = chains{i}.param_names;
+    if isstring(names)
+        names = cellstr(names);
+    elseif ischar(names)
+        names = cellstr(names);
+    end
+    names = cellfun(@char, names, 'UniformOutput', false);
+
+    burn = floor(burn_frac * size(theta,1)) + 1;
+
+    names_all{i} = names;
+    theta_post_all{i} = theta(burn:end,:);
+end
+
+%% ========================================================================
+% Detect parameter structure from first chain
+% ========================================================================
+
+plot_items = detect_plot_items(names_all{1});
+
+n_items = numel(plot_items);
+
+if n_items == 2
+    n_rows = 1;
+    n_cols = 2;
+elseif n_items == 4
+    n_rows = 2;
+    n_cols = 2;
+else
+    error('Unexpected number of plot items: %d.', n_items);
+end
+
+% Figure size is scaled with number of rows/columns so that individual
+% subplot boxes remain approximately constant across 1x2 and 2x2 plots.
+figure_position = [ ...
+    figure_left_px, ...
+    figure_bottom_px, ...
+    n_cols * panel_width_px, ...
+    n_rows * panel_height_px ...
+    ];
+
+%% ========================================================================
+% Plot
+% ========================================================================
+
+fig = figure('Color','w','Position',figure_position);
+tl = tiledlayout(n_rows, n_cols, ...
+    'TileSpacing', 'compact', ...
+    'Padding', 'compact');
+
+summary = table();
+
+for j = 1:n_items
+
+    ax = nexttile(j);
+    hold(ax, 'on');
+
+    for i = 1:n_cases
+
+        chain = chains{i};
+        names = names_all{i};
+        theta_post = theta_post_all{i};
+
+        idx = find(strcmp(names, plot_items(j).param_name), 1);
+        samples = theta_post(:,idx);
+
+        % Prior SD
+        if isfield(chain, 'prior_sd') && numel(chain.prior_sd) >= idx
+            prior_sd = chain.prior_sd(idx);
+        else
+            prior_sd = fallback_prior_sd;
+        end
+
+        % Posterior colour
+        if use_case_color && isfield(cases(i), 'color') && ~isempty(cases(i).color)
+            post_color = cases(i).color;
+        else
+            post_color = posterior_default;
+        end
+
+        % Label
+        case_label = get_case_label(cases(i), i);
+
+        % Prior and posterior densities
+        [x, prior_y, post_x, post_y] = make_prior_posterior_curve( ...
+            samples, prior_mu_default, prior_sd);
+
+        % Plot prior once per case. If multiple cases share same prior this
+        % will overplot, which is harmless and keeps prior differences visible.
+        plot(ax, x, prior_y, '--', ...
+            'LineWidth', prior_line_width, ...
+            'Color', prior_color, ...
+            'HandleVisibility','off');
+
+        plot(ax, post_x, post_y, '-', ...
+            'LineWidth', post_line_width, ...
+            'Color', post_color, ...
+            'DisplayName', case_label);
+
+        % Summary table
+        row = table();
+        row.case_index = i;
+        row.label = string(case_label);
+        row.parameter = string(plot_items(j).param_name);
+        row.prior_sd = prior_sd;
+        row.n_samples = numel(samples);
+        row.mean_log = mean(samples);
+        row.median_log = median(samples);
+        row.q025_log = prctile(samples, 2.5);
+        row.q25_log = prctile(samples, 25);
+        row.q75_log = prctile(samples, 75);
+        row.q975_log = prctile(samples, 97.5);
+        row.median_multiplier = exp(median(samples));
+
+        summary = [summary; row]; %#ok<AGROW>
+    end
+
+    if show_baseline
+        xline(ax, 0, ':k', 'Baseline', ...
+            'LabelVerticalAlignment', 'middle', ...
+            'LabelHorizontalAlignment', 'left', ...
+            'HandleVisibility','off');
+    end
+
+    grid(ax, 'on');
+    box(ax, 'on');
+
+    xlabel(ax, 'log-multiplier', 'FontSize', font_size);
+    ylabel(ax, 'Density', 'FontSize', font_size);
+
+    title(ax, plot_items(j).title, ...
+        'FontSize', font_size, ...
+        'Interpreter', 'tex');
+
+    set(ax, 'FontSize', font_size);
+
+    if show_legend && j == 1
+        % Add dummy prior handle so legend says prior/posterior clearly
+        h_prior = plot(ax, NaN, NaN, '--', ...
+            'Color', prior_color, ...
+            'LineWidth', prior_line_width, ...
+            'DisplayName', 'Prior');
+
+        h_post = plot(ax, NaN, NaN, '-', ...
+            'Color', posterior_default, ...
+            'LineWidth', post_line_width, ...
+            'DisplayName', 'Posterior');
+
+        legend(ax, [h_prior h_post], {'Prior','Posterior'}, ...
+            'Location', legend_location, ...
+            'Box', 'on');
+    end
+end
+
+% Hide unused lower-row tiles for 2-parameter chains, while preserving
+% the same 2 x 2 figure geometry as the 4-parameter plots.
+if n_items == 2
+    for empty_tile = 3:4
+        ax_empty = nexttile(empty_tile);
+        axis(ax_empty, 'off');
+    end
+end
+
+disp(summary)
+
+end
+
+%% =========================================================================
+% Load chain struct from .mat file
+% =========================================================================
+function chain = load_chain_struct(chain_file)
+
+S = load(chain_file);
+f = fieldnames(S);
+
+chain = [];
+for k = 1:numel(f)
+    obj = S.(f{k});
+    if isstruct(obj) && isfield(obj, 'theta') && isfield(obj, 'param_names')
+        chain = obj;
+        return;
+    end
+end
+
+error('Could not find a valid chain struct in file: %s', chain_file);
+
+end
+
+%% =========================================================================
+% Detect plotting layout from parameter names
+% =========================================================================
+function plot_items = detect_plot_items(names)
+
+has_qnc = all(ismember({'log_QNC_Emax','log_QNC_MIC'}, names));
+
+has_nitro = all(ismember({'log_nitro_Emax','log_nitro_MIC'}, names));
+has_abz   = all(ismember({'log_ABZ_Emax','log_ABZ_MIC'}, names));
+
+if has_qnc && ~has_nitro && ~has_abz
+
+    plot_items = struct([]);
+
+    plot_items(1).param_name = 'log_QNC_Emax';
+    plot_items(1).title = 'Quinacrine E_{max}';
+
+    plot_items(2).param_name = 'log_QNC_MIC';
+    plot_items(2).title = 'Quinacrine concentration scale';
+
+elseif has_nitro && has_abz
+
+    plot_items = struct([]);
+
+    % Top row: nitroimidazole
+    plot_items(1).param_name = 'log_nitro_Emax';
+    plot_items(1).title = 'Nitroimidazole E_{max}';
+
+    plot_items(2).param_name = 'log_nitro_MIC';
+    plot_items(2).title = 'Nitroimidazole concentration scale';
+
+    % Bottom row: albendazole
+    plot_items(3).param_name = 'log_ABZ_Emax';
+    plot_items(3).title = 'Albendazole E_{max}';
+
+    plot_items(4).param_name = 'log_ABZ_MIC';
+    plot_items(4).title = 'Albendazole concentration scale';
+
+else
+
+    fprintf('\nParameter names found:\n')
+    disp(names(:))
+    error(['Could not detect supported parameter structure. ', ...
+           'Expected either QNC pair or nitro+ABZ four-parameter chain.']);
+end
+
+end
+
+%% =========================================================================
+% Case label
+% =========================================================================
+function case_label = get_case_label(case_struct, i)
+
+if isfield(case_struct, 'label') && ~isempty(case_struct.label)
+    case_label = case_struct.label;
+elseif isfield(case_struct, 'regimen') && ~isempty(case_struct.regimen)
+    case_label = case_struct.regimen;
+else
+    case_label = sprintf('Case %d', i);
+end
+
+end
+
+%% =========================================================================
+% Build prior/posterior curves
+% =========================================================================
+function [xgrid, prior_pdf, x_post, y_post] = make_prior_posterior_curve(samples, prior_mu, prior_sd)
+
+samples = samples(:);
+samples = samples(isfinite(samples));
+
+q_lo = prctile(samples, 0.5);
+q_hi = prctile(samples, 99.5);
+
+x_lo = min(prior_mu - 4*prior_sd, q_lo - 0.3*max(1, abs(q_lo)));
+x_hi = max(prior_mu + 4*prior_sd, q_hi + 0.3*max(1, abs(q_hi)));
+
+xgrid = linspace(x_lo, x_hi, 400);
+prior_pdf = normpdf(xgrid, prior_mu, prior_sd);
+
+[y_post, x_post] = ksdensity(samples, xgrid);
+
+end
+
+%% ========================================================================
+% Example input: pooled QNC7D chain
+% Produces 1 x 2 plot:
+%   left  = QNC Emax
+%   right = QNC concentration scale
+% ========================================================================
+%{
+C = lines(7);
+
+cases = struct([]);
+
+qnc_file = 'mcmc_outputs/pooled_QNC7D_4chains_currentSimulator.mat';
+
+cases(1).chain_file = qnc_file;
+cases(1).regimen = 'QNC7D';
+cases(1).scenario = 'refractory';
+cases(1).label = 'QNC7D';
+cases(1).absorbExtinction = false;
+cases(1).extinction_threshold = NaN;
+cases(1).line_style = '-';
+cases(1).color = C(7,:);
+
+plot_prior_posterior_cases(cases);
+%}
+
+%% ========================================================================
+% Example input: pooled MTZ14D+ABZ7D chain
+% Produces 2 x 2 plot:
+%   top-left      = nitroimidazole Emax
+%   top-right     = nitroimidazole concentration scale
+%   bottom-left   = albendazole Emax
+%   bottom-right  = albendazole concentration scale
+% ========================================================================
+%{
+C = lines(7);
+
+cases = struct([]);
+
+mtz_abz_file = 'mcmc_outputs/pooled_MTZ14D_ABZ7D_4chains_currentSimulator.mat';
+
+cases(1).chain_file = mtz_abz_file;
+cases(1).regimen = 'MTZ14D_ABZ7D';
+cases(1).scenario = 'refractory';
+cases(1).label = 'MTZ14D+ABZ7D';
+cases(1).absorbExtinction = false;
+cases(1).extinction_threshold = NaN;
+cases(1).line_style = '-';
+cases(1).color = C(7,:);
+
+plot_prior_posterior_cases(cases);
+%}

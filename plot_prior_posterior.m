@@ -13,6 +13,8 @@ function plot_prior_posterior(chain, prior_sd, burn_frac, use_multiplier_scale)
 %   prior_sd = [0.75 0.75 0.50 0.50];
 %   plot_prior_posterior(chain, prior_sd, 0.5, true)
 
+plot_title = 'MTZ14d+ABX7d';
+
 if nargin < 2 || isempty(prior_sd)
     prior_sd = [0.75 0.75 0.50 0.50];
 end
@@ -120,13 +122,15 @@ for j = 1:n_param
     grid on;
     legend({'Prior','Posterior'}, 'Location', 'best');
 end
-
+%{
 if use_multiplier_scale
-    sgtitle('Prior vs posterior: parameter multipliers');
+    %sgtitle('Prior vs posterior: parameter multipliers');
+    sgtitle(sprintf('%s %s','Parameter multipliers: ',plot_title));
 else
-    sgtitle('Prior vs posterior: log-multipliers');
+    %sgtitle('Prior vs posterior: log-multipliers');
+    sgtitle(sprintf('%s %s','Log-multipliers: ',plot_title));
 end
-
+%}
 end
 
 % -------------------------------------------------------------------------

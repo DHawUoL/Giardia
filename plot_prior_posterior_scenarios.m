@@ -9,6 +9,7 @@ function plot_prior_posterior_scenarios(result_files, scenario_labels)%, prior_s
    'mcmc_sensitivity_outputs/pooled_alb_nitro_mtz14_abz7_chain.mat'
    'mcmc_sensitivity_outputs/pooled_alb_nitro_tdz2g_abz5_chain.mat'
    'mcmc_sensitivity_outputs/pooled_alb_nitro_tdz2g_abz7_chain.mat'
+   'qnc_refractory_50_54_chain'
    };
 
  scenario_labels = {
@@ -17,6 +18,8 @@ function plot_prior_posterior_scenarios(result_files, scenario_labels)%, prior_s
    'MTZ14D + ABZ7D'
    'TDZ2G + ABZ5D'
    'TDZ2G + ABZ7D'
+   'QNC7D'
+
    };
 %}
 % prior_sd = [0.75 0.75 0.50 0.50];
