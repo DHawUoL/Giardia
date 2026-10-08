@@ -17,8 +17,14 @@ theta_inits = [
     -1.0   0.0
      0.5  -0.5
 ];
-%}
 
+n_iter     = 3000;
+n_vp       = 150;
+t_end_days = 35;
+
+vp_seed = 1001;
+%}
+%{
 scenario_name = 'pooled_alb_nitro_mtz14_abz7';
 pooled_name = 'pooled_MTZ14D_ABZ7D_4chains_currentSimulator.mat';
 
@@ -36,6 +42,47 @@ n_vp       = 150;
 t_end_days = 35;
 
 vp_seed = 1001;
+%}
+
+%
+scenario_name = 'qnc_refractory_51_54';
+pooled_name = 'pooled_QNC7D_51_54_4chains_burnin.mat';
+
+mcmc_seeds = [41 42 43 44];
+
+theta_inits = [
+     0.0   0.0
+     1.0   0.0
+    -1.0   0.0
+     0.5  -0.5
+];
+
+n_iter     = 3000;
+n_vp       = 1000;
+t_end_days = 35;
+
+vp_seed = 1001;
+%}
+
+%{
+scenario_name = 'qnc_refractory_46_49';
+pooled_name = 'pooled_QNC7D_46_49_4chains_burnin.mat';
+
+mcmc_seeds = [41 42 43 44];
+
+theta_inits = [
+     0.0   0.0
+     1.0   0.0
+    -1.0   0.0
+     0.5  -0.5
+];
+
+n_iter     = 3000;
+n_vp       = 1000;
+t_end_days = 35;
+
+vp_seed = 1001;
+%}
 
 outdir = 'mcmc_outputs';
 if ~exist(outdir, 'dir')
@@ -181,8 +228,8 @@ function R = run_one_qnc_chain(chain_id, scenario_name, n_iter, n_vp, ...
 
     catch ME
         errname = fullfile(outdir, ...
-            sprintf('qnc_refractory_50_54_chain%d_mcmc%d_ERROR.mat', ...
-            chain_id, mcmc_seed));
+            sprintf('%s_chain%d_mcmc%d_ERROR.mat', ...
+            scenario_name, chain_id, mcmc_seed));
 
         save(errname, 'ME', 'scenario_name', 'chain_id', ...
             'mcmc_seed', 'vp_seed', 'theta_init');

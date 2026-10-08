@@ -111,8 +111,11 @@ for i = 1:numel(tvec)-1
         km = 0;
     end
 
-    % Simple ramp for immune clearance after day 7.
-    kI = p.k_I * (1 + 0.5*(tvec(i) > 24*7));
+    % Simple ramp for immune clearance after 7 days of infection history.
+    % tvec may begin before treatment, so use time since simulation start
+    % rather than absolute model time.
+    infection_age_h = tvec(i) - tvec(1) + 24*30;
+    kI = p.k_I * (1 + 0.5*(infection_age_h > 24*7));
 
     dT = p.rT*T(i)*(1 - T(i)/p.K) ...
        - p.k_encyst*T(i) ...
@@ -153,12 +156,15 @@ for i = 1:numel(tvec)-1
     end
 end
 
-% Clearance time: first time T<thr and stays below for hold period.
+% Clearance time: first POST-TREATMENT time T<thr and stays below
+% for the required hold period. Treatment begins at t = 0.
 thr = p.clearance_threshold;
 hold = p.clearance_hold_h;
 clear_time = NaN;
 
-for i = 1:numel(tvec)
+idx_treat = find(tvec >= 0, 1, 'first');
+
+for i = idx_treat:numel(tvec)
     if T(i) < thr
         j = i + round(hold/dt);
 

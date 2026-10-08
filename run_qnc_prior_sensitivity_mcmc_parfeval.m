@@ -12,7 +12,7 @@ if ~exist(outdir, 'dir')
     mkdir(outdir);
 end
 
-scenario_name = 'qnc_refractory_50_54';
+scenario_name = 'qnc_refractory_51_54';
 
 n_iter     = 3000;
 n_vp       = 150;
@@ -159,7 +159,7 @@ function R = run_one_qnc_prior_chain(job_id, job, n_iter, n_vp, t_end_days, outd
         prior_tag = strrep(prior_tag, '.', 'p');
 
         outname = fullfile(outdir, ...
-            sprintf('qnc_refractory_50_54_prior_%s_onechain_mcmc%d_vp%d_currentSimulator.mat', ...
+            sprintf('qnc_refractory_51_54_prior_%s_onechain_mcmc%d_vp%d_currentSimulator.mat', ...
             prior_tag, job.mcmc_seed, job.vp_seed));
 
         scenario_name = job.scenario_name;
@@ -183,7 +183,7 @@ function R = run_one_qnc_prior_chain(job_id, job, n_iter, n_vp, t_end_days, outd
         prior_tag = strrep(prior_tag, '.', 'p');
 
         errname = fullfile(outdir, ...
-            sprintf('qnc_refractory_50_54_prior_%s_onechain_mcmc%d_ERROR.mat', ...
+            sprintf('qnc_refractory_51_54_prior_%s_onechain_mcmc%d_ERROR.mat', ...
             prior_tag, job.mcmc_seed));
 
         scenario_name = job.scenario_name;

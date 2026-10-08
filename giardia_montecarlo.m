@@ -117,6 +117,36 @@ switch lower(scenario_name)
         SC.targets(1).response_day = 30;
         SC.targets(1).weight       = 1.0;
 
+    case 'qnc_refractory_51_54'
+        SC.name = 'qnc_refractory_51_54';
+        SC.param_names = {'log_QNC_Emax','log_QNC_MIC'};
+        SC.prior_sd = [0.90 0.90];
+        SC.prop_sd  = [0.25 0.25];
+
+        SC.targets = struct([]);
+        SC.targets(1).name         = 'QNC_refractory_first_course';
+        SC.targets(1).regimen      = 'QNC7D';
+        SC.targets(1).scenario     = 'refractory';
+        SC.targets(1).x            = 51;
+        SC.targets(1).n            = 54;
+        SC.targets(1).response_day = 30;
+        SC.targets(1).weight       = 1.0;
+
+    case 'qnc_refractory_46_49'
+        SC.name = 'qnc_refractory_46_49';
+        SC.param_names = {'log_QNC_Emax','log_QNC_MIC'};
+        SC.prior_sd = [0.90 0.90];
+        SC.prop_sd  = [0.25 0.25];
+
+        SC.targets = struct([]);
+        SC.targets(1).name         = 'QNC_refractory_first_course';
+        SC.targets(1).regimen      = 'QNC7D';
+        SC.targets(1).scenario     = 'refractory';
+        SC.targets(1).x            = 46;
+        SC.targets(1).n            = 49;
+        SC.targets(1).response_day = 30;
+        SC.targets(1).weight       = 1.0;
+
     case 'pooled_alb_nitro_mtz5_abz5'
         SC.name = 'pooled_alb_nitro_MTZ5D_ABZ5D';
         SC.param_names = {'log_nitro_Emax','log_nitro_MIC', ...
@@ -270,14 +300,31 @@ end
 local_validate_scenario(SC);
 
 p0 = giardia_params();
-tvec = 0:SC.dt_h:(24*t_end_days);
 
-% -------------------------------------------------------------------------
-% Fixed virtual-patient panel.
-% Holding vp_seed fixed means the same virtual population is used across
-% repeated MCMC chains and across scenarios.
-% -------------------------------------------------------------------------
-Z = local_make_virtual_panel(n_vp, vp_seed);
+% -------------------------------------------------------------
+% Pretreatment burn-in and fixed virtual-patient panel.
+%
+% Refractory virtual patients undergo a 30-day untreated burn-in ONCE.
+% Only patients still infected at treatment initiation are retained.
+% Their states at t = 0 are stored and reused throughout the MCMC.
+% -------------------------------------------------------------
+pre_treatment_days = 30;
+
+is_refractory = any(strcmpi({SC.targets.scenario}, 'refractory'));
+
+if is_refractory
+    P = local_make_eligible_burned_panel( ...
+        n_vp, vp_seed, p0, SC, pre_treatment_days);
+else
+    Z = local_make_virtual_panel(n_vp, vp_seed);
+    P = repmat(p0, n_vp, 1);
+    for i = 1:n_vp
+        P(i) = local_make_patient(p0, Z, i, SC);
+    end
+end
+
+% Likelihood simulations begin at treatment initiation.
+tvec = 0:SC.dt_h:(24*t_end_days);
 
 % -------------------------------------------------------------------------
 % MCMC proposal randomness.
@@ -293,7 +340,7 @@ else
         error('theta_init must have length %d for this scenario.', numel(SC.param_names));
     end
 end
-[logpost, detail] = local_logpost(theta, p0, Z, tvec, SC);
+[logpost, detail] = local_logpost(theta, P, tvec, SC);
 
 Theta = NaN(n_iter, numel(SC.param_names));
 LogPost = NaN(n_iter,1);
@@ -302,7 +349,7 @@ Details = cell(n_iter,1);
 
 for it = 1:n_iter
     theta_prop = theta + SC.prop_sd .* randn(size(theta));
-    [lp_prop, detail_prop] = local_logpost(theta_prop, p0, Z, tvec, SC);
+    [lp_prop, detail_prop] = local_logpost(theta_prop, P, tvec, SC);
 
     if log(rand) < (lp_prop - logpost)
         theta = theta_prop;
@@ -354,7 +401,7 @@ chain.posterior_summary = table(SC.param_names(:), mean(S,1)', median(S,1)', ...
 
 % Posterior-predictive target fit at posterior median.
 theta_med = median(S,1);
-[~, fit_detail] = local_logpost(theta_med, p0, Z, tvec, SC);
+[~, fit_detail] = local_logpost(theta_med, P, tvec, SC);
 chain.posterior_median_fit = fit_detail;
 
 disp(' ')
@@ -419,7 +466,7 @@ end
 end
 
 % -------------------------------------------------------------------------
-function [lp, detail] = local_logpost(theta, p0, Z, tvec, SC)
+function [lp, detail] = local_logpost(theta, P, tvec, SC)
 % Log posterior = log prior + weighted binomial log likelihood.
 
 lp_prior = -0.5 * sum((theta ./ SC.prior_sd).^2) ...
@@ -437,7 +484,7 @@ for k = 1:numel(SC.targets)
         continue
     end
 
-    q = local_model_response_probability(theta, p0, Z, tvec, tar, SC);
+    q = local_model_response_probability(theta, P, tvec, tar, SC);
     q = min(max(q, 1e-6), 1 - 1e-6);
 
     % Binomial log likelihood; choose(n,x) constant omitted.
@@ -462,18 +509,17 @@ detail = struct('log_prior', lp_prior, ...
 end
 
 % -------------------------------------------------------------------------
-function q = local_model_response_probability(theta, p0, Z, tvec, tar, SC)
-% Estimate response probability from fixed virtual-patient panel.
+function q = local_model_response_probability(theta, P, tvec, tar, SC)
+% Estimate response probability from fixed, already-burned-in patients.
 
-n_vp = numel(Z.rT);
+n_vp = numel(P);
 success = false(n_vp,1);
 
 for i = 1:n_vp
-    p = local_make_patient(p0, Z, i, SC);
+    p = P(i);
     p = local_apply_pd_multipliers(p, theta, SC.param_names);
 
     opts = struct('useMicrobiome', true, 'resistant', false);
-
     if strcmpi(tar.scenario, 'refractory')
         opts.resistant = true;
     elseif strcmpi(tar.scenario, 'baseline')
@@ -592,6 +638,71 @@ Z.alpha    = randn(n_vp,1);
 end
 
 % -------------------------------------------------------------------------
+function P = local_make_eligible_burned_panel( ...
+    n_vp, vp_seed, p0, SC, pre_treatment_days)
+% Generate fixed refractory VPs and perform untreated burn-in once.
+
+n_candidates = 2 * n_vp;
+Zraw = local_make_virtual_panel(n_candidates, vp_seed);
+
+tvec_burn = (-24*pre_treatment_days):SC.dt_h:0;
+reg = giardia_regimens(SC.targets(1).regimen, 0);
+
+opts = struct();
+opts.useMicrobiome = true;
+opts.resistant = strcmpi(SC.targets(1).scenario, 'refractory');
+
+% Ensure cached patients all share the same structure.
+p_template = p0;
+p_template.infection_age0_h = 24 * pre_treatment_days;
+
+P_candidate = repmat(p_template, n_candidates, 1);
+eligible = false(n_candidates,1);
+T_at_treatment = NaN(n_candidates,1);
+
+for i = 1:n_candidates
+    p = local_make_patient(p0, Zraw, i, SC);
+    out = giardia_simulate(tvec_burn, reg, p, opts);
+
+    T_at_treatment(i) = out.T(end);
+
+    if T_at_treatment(i) >= p.clearance_threshold
+        eligible(i) = true;
+        p.T0 = out.T(end);
+        p.C0 = out.C(end);
+        p.M0 = out.M(end);
+
+        % Tell subsequent post-treatment simulations that infection has
+        % already existed for the full pretreatment burn-in period.
+        p.infection_age0_h = 24 * pre_treatment_days;
+
+        P_candidate(i) = p;
+    end
+end
+
+idx = find(eligible);
+if numel(idx) < n_vp
+    error(['Only %d of %d candidate virtual patients remained infected ' ...
+           'after burn-in; need %d. Increase n_candidates.'], ...
+           numel(idx), n_candidates, n_vp);
+end
+
+idx = idx(1:n_vp);
+P = P_candidate(idx);
+
+fprintf('\n');
+fprintf('=== Refractory virtual-patient eligibility ===\n');
+fprintf('Candidate patients:        %d\n', n_candidates);
+fprintf('Eligible after burn-in:    %d\n', sum(eligible));
+fprintf('Retained for calibration:  %d\n', n_vp);
+fprintf('Candidate eligibility:     %.3f\n', mean(eligible));
+fprintf('Median eligible T(0):      %.4g\n', median(T_at_treatment(idx)));
+fprintf('Minimum eligible T(0):     %.4g\n', min(T_at_treatment(idx)));
+fprintf('\n');
+
+end
+
+% -------------------------------------------------------------------------
 function p = local_make_patient(p0, Z, i, SC)
 % Build one virtual patient from fixed random numbers.
 
@@ -613,7 +724,13 @@ if SC.sample_host_block
     p.k_micro = max(0, p.k_micro * exp(SC.vp.host.k_micro * Z.k_micro(i)));
     p.dys     = max(0, p.dys     * exp(SC.vp.host.dys     * Z.dys(i)));
     p.rM      = max(0, p.rM      * exp(SC.vp.host.rM      * Z.rM(i)));
-    p.M0      = min(1, max(0, p.M0 + SC.vp.host.M0_sd * Z.M0(i)));
+    %p.M0      = min(1, max(0, p.M0 + SC.vp.host.M0_sd * Z.M0(i)));
+    % Avoid exact M=0, which is an invariant absorbing boundary of the
+    % microbiome equation and can be created artificially by truncation.
+    M_eps = 1e-6;
+    
+    p.M0 = min(1, max(M_eps, ...
+        p.M0 + SC.vp.host.M0_sd * Z.M0(i)));
 end
 
 % C. Shared GI/local exposure multipliers.

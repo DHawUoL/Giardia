@@ -367,7 +367,34 @@ C = lines(7);
 
 cases = struct([]);
 
-qnc_file = 'mcmc_outputs/pooled_QNC7D_4chains_currentSimulator.mat';
+%qnc_file = 'mcmc_outputs/pooled_QNC7D_4chains_currentSimulator.mat';
+qnc_file = 'mcmc_outputs/pooled_QNC7D_51_54_4chains_burnin.mat';
+
+cases(1).chain_file = qnc_file;
+cases(1).regimen = 'QNC7D';
+cases(1).scenario = 'refractory';
+cases(1).label = 'QNC7D';
+cases(1).absorbExtinction = false;
+cases(1).extinction_threshold = NaN;
+cases(1).line_style = '-';
+cases(1).color = C(7,:);
+
+plot_prior_posterior_cases(cases);
+%}
+
+%% ========================================================================
+% Example input: pooled QNC7D chain
+% Produces 1 x 2 plot:
+%   left  = QNC Emax
+%   right = QNC concentration scale
+% ========================================================================
+%{
+C = lines(7);
+
+cases = struct([]);
+
+%qnc_file = 'mcmc_outputs/pooled_QNC7D_4chains_currentSimulator.mat';
+qnc_file = 'mcmc_outputs/pooled_QNC7D_46_49_4chains_burnin.mat';
 
 cases(1).chain_file = qnc_file;
 cases(1).regimen = 'QNC7D';

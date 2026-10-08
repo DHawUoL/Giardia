@@ -395,4 +395,18 @@ cases(2).scenario   = 'refractory';
 cases(2).label      = 'QNC7D';
 
 summary = plot_outcome_probability_curves(cases, 180, 800, 123, 30);
+
+%%%%
+
+cases(1).chain_file = 'mcmc_outputs/pooled_MTZ14D_ABZ7D_4chains_currentSimulator.mat';
+cases(1).regimen    = 'MTZ14D_ABZ7D';
+cases(1).scenario   = 'refractory';
+cases(1).label      = 'MTZ14D + ABZ7D';
+
+cases(2).chain_file = 'mcmc_outputs/pooled_QNC7D_4chains_currentSimulator.mat';
+cases(2).regimen    = 'QNC7D';
+cases(2).scenario   = 'refractory';
+cases(2).label      = 'QNC7D';
+
+summary = plot_outcome_probability_curves(cases, 180, 800, 123, 30);
 %}
